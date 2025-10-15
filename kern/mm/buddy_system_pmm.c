@@ -13,7 +13,10 @@ static size_t available_page_num = 0; // 可用于分配的空闲页总数
 int cal_buddy_order(size_t n) { // 找到满足2^k>=n的最小k
     int k = 0;
     size_t s = 1;
-    while (s < n) { s <<= 1; k++; }
+    while (s < n) { 
+        s *= 2; 
+        k++; 
+    }
     return k;
 }
 
@@ -28,6 +31,9 @@ static void buddy_init(void) {
 
 static void buddy_init_memmap(struct Page *base, size_t n) {
     // 初始化
+    max_order=floor(log2(n));
+    int header_size = (max_order+1)*sizeof(list_entry_t);
+    int page_num = 
 }
 
 static struct Page *buddy_alloc_pages(size_t n) {
