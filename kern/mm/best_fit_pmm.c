@@ -75,7 +75,8 @@ best_fit_init_memmap(struct Page *base, size_t n) {
         /*LAB2 EXERCISE 2: YOUR CODE*/ 
         // 清空当前页框的标志和属性信息，并将页框的引用计数设置为0
         p->flags = 0;               // 清除所有标志位
-        p->property = 0;            // 清除属性值
+        ClearPageReserved(p);       // 清除保留标志
+        ClearPageProperty(p);       // 清除属性标志
         set_page_ref(p, 0);         // 引用计数归零
     }
     base->property = n;
@@ -156,6 +157,7 @@ best_fit_free_pages(struct Page *base, size_t n) {
     base->property = n;         //设置当前页块的属性为释放的页块数
     SetPageProperty(base);      //将当前页块标记为已分配状态
     nr_free += n;               //增加nr_free的值
+    ClearPageReserved(base);
 
     if (list_empty(&free_list)) {
         list_add(&free_list, &(base->page_link));

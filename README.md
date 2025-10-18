@@ -1,0 +1,1 @@
+实验报告在lab2.md文件，buddy system设计文档在design_file.md文件

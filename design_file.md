@@ -288,5 +288,5 @@ check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0204000
 satp physical address: 0x0000000080204000
 ```
-可以看到输出检查成功的信息，说明我们设计的Buddy System算法没问题。
+可以看到，输出了成功信息，这说明我们的buddy system算法设计成功。
 
