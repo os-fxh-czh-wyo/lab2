@@ -19,7 +19,7 @@ Buddy System算法把系统中的可用存储空间划分为存储块(Block)来�
 - 将 header 的物理地址加上 `va_pa_offset` 得到内核虚地址并把 `free_list` 指向它，然后对每个 `free_list[i]` 调用 `list_init()`实现数组初始化。
 - 按从左到右、尽量选取最大的对齐 2^k 块把剩余页分解为若干块，将每一页的property设置成order并加入 `free_list[order]`，同时维护 `buddy_nr_free`。
 
-关键代码片段：
+核心代码片段：
 
 ```c
 static void buddy_init_memmap(struct Page *base, size_t n) {
@@ -70,7 +70,7 @@ static void buddy_init_memmap(struct Page *base, size_t n) {
 - 在目标阶到 max_order 范围内从低到高查找第一个非空的 `free_list[i]`，如果找不到返回 NULL。
 - 从找到的 `free_list[i]` 弹出块，并把 `buddy_nr_free` 减去该块大小。如果找到的阶大于目标阶，则把该块不断拆分：每次把高地址的那一半作为较低阶的空闲块放回对应链表，并更新 `buddy_nr_free`。最终剩下的低地址那一半作为分配块，清除其 Property 标志并返回。
 
-核心实现片段：
+核心代码片段：
 
 ```c
 static struct Page *buddy_alloc_pages(size_t n) {
@@ -109,7 +109,7 @@ static struct Page *buddy_alloc_pages(size_t n) {
 - 将释放块标记为 free，然后尝试与同阶的伙伴合并。通过对基础物理页号 XOR 计算伙伴地址，检查伙伴是否在可管理范围、是否为 free 且伙伴的 property 是否等于 order。若满足则从 free_list 中删除伙伴并清除伙伴的 Property，合并为更高阶继续尝试，直到不能合并或达到 max_order。
 - 合并完成后把最终的大块按阶放回对应的 free_list，并更新 `buddy_nr_free`。
 
-核心实现片段：
+核心代码片段：
 
 ```c
 static void
@@ -198,7 +198,7 @@ static void buddy_check(void) {
     size_t alloc_sizes[] = {1, 2, 3, 4, 5};  // 单位页
     int n_alloc_sizes = sizeof(alloc_sizes)/sizeof(alloc_sizes[0]);
 
-    for (int i=0; i<n_alloc_sizes; i++) {
+    for (int i·=0; i<n_alloc_sizes; i++) {
         struct Page *p = buddy_alloc_pages(alloc_sizes[i]);
         assert(p != NULL);  // 确保分配成功
         blocks[num_blocks] = p;
@@ -288,5 +288,5 @@ check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0204000
 satp physical address: 0x0000000080204000
 ```
-
+可以看到输出检查成功的信息，说明我们设计的Buddy System算法没问题。
 
