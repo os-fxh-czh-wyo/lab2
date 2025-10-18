@@ -30,29 +30,43 @@ static void buddy_init(void) {
 }
 
 static void buddy_init_memmap(struct Page *base, size_t n) {
-    // 初始化
-    int i=0;
-    while((1UL << (i+1)) <= n){
+    // 初始化 max_order
+    int i = 0;
+    while ((1UL << (i + 1)) <= n) {
         i++;
-        max_order=i;
+        max_order = i;
     }
-    size_t header_size = (max_order+1)*sizeof(list_entry_t);
-    size_t header_pages_num = ROUNDUP(header_size, PGSIZE) / PGSIZE;
-    for(size_t i=0;i<header_pages_num;i++){
-        SetPageReserved(base+i);
+
+    size_t header_size = (max_order + 1) * sizeof(list_entry_t);
+    size_t header_pages_num = (header_size + PGSIZE - 1) / PGSIZE;
+
+    for (size_t j = 0; j < header_pages_num; j++) {
+        SetPageReserved(base + j);
+        ClearPageProperty(base + j);
     }
-    uintptr_t freelist_head=page2pa(base);
-    free_list=(list_entry_t *)(freelist_head+va_pa_offset);
+    struct Page *r = base + header_pages_num;
+    for (struct Page *q = r; q < base + n; q++) {
+        if (PageReserved(q)) {
+            ClearPageReserved(q);
+        }
+        ClearPageProperty(q);
+        q->property = 0;
+        set_page_ref(q, 0);
+    }
+
+    uintptr_t freelist_head = page2pa(base);
+    free_list = (list_entry_t *)(freelist_head + va_pa_offset);
     buddy_init();
-    struct Page *p=base+header_pages_num;
-    size_t remain_pages=n-header_pages_num;
-    while(remain_pages>0){
+
+    struct Page *p = base + header_pages_num;
+    size_t remain_pages = n - header_pages_num;
+    while (remain_pages > 0) {
         size_t idx = page2ppn(p);
-        int order=0;
-        while((1UL << (order + 1)) <= remain_pages){
+        int order = 0;
+        while ((1UL << (order + 1)) <= remain_pages) {
             order++;
         }
-        while(order > 0 && (idx & ((1UL << order) - 1)) != 0){
+        while (order > 0 && (idx & ((1UL << order) - 1)) != 0) {
             order--;
         }
         SetPageProperty(p);
@@ -108,7 +122,7 @@ buddy_free_pages(struct Page *base, size_t n) {
     // 2️. 校验输入页区间是否合法
     struct Page *p = base;
     for (; p != base + block_size; p++) {
-        assert(!PageReserved(p) && !PageProperty(p)); // 必须不是已被管理的页
+        assert(!PageReserved(p) && !PageProperty(p));
         p->flags = 0;
         set_page_ref(p, 0);
     }
@@ -119,7 +133,7 @@ buddy_free_pages(struct Page *base, size_t n) {
     // 保证 base 对齐到块大小，否则无法正确找到 buddy
 
     // 4️. 初始化块元信息
-    base->property = block_size;
+    base->property = order;
     SetPageProperty(base);
     buddy_nr_free += block_size;
 
@@ -133,7 +147,7 @@ buddy_free_pages(struct Page *base, size_t n) {
             break;
 
         // 伙伴块大小必须匹配才能合并
-        if (buddy->property != block_size)
+        if ((int)buddy->property != order)
             break;
 
         // 确保 buddy 在 free_list[order] 中，先移除
@@ -158,7 +172,7 @@ buddy_free_pages(struct Page *base, size_t n) {
     }
     list_add_before(le, &(base->page_link));
 
-    base->property = block_size;
+    base->property = order;
     SetPageProperty(base);
 }
 
@@ -167,8 +181,8 @@ static size_t buddy_nr_free_pages(void) { // 得到可用于分配的空闲页�
     return buddy_nr_free;
 }
 
-static void buddy_check(void) {
-    // 检查
+static void basic_check(void) {
+    // 基础检查
     assert(free_list != NULL);
     assert(max_order >= 0);
     size_t sum = 0;
@@ -188,6 +202,60 @@ static void buddy_check(void) {
     }
     assert(sum == buddy_nr_free);
 }
+
+static void buddy_check(void) {
+    basic_check(); // 原有结构检查
+    // 1. 初始化变量
+    size_t total_free_before = buddy_nr_free_pages();
+    struct Page *blocks[16];  // 用于记录分配的块
+    size_t block_sizes[16];   // 对应块大小
+    int num_blocks = 0;
+
+    
+    // 2. 分配一些块
+    size_t alloc_sizes[] = {1, 2, 3, 4, 5};  // 单位页
+    int n_alloc_sizes = sizeof(alloc_sizes)/sizeof(alloc_sizes[0]);
+
+    for (int i=0; i<n_alloc_sizes; i++) {
+        struct Page *p = buddy_alloc_pages(alloc_sizes[i]);
+        assert(p != NULL);  // 确保分配成功
+        blocks[num_blocks] = p;
+        block_sizes[num_blocks] = alloc_sizes[i];
+        num_blocks++;
+
+        // 分配后空闲页数应减少
+        size_t expected_free = total_free_before;
+        for (int j=0; j<num_blocks; j++)
+            expected_free -= (1UL << cal_buddy_order(block_sizes[j]));
+        assert(buddy_nr_free_pages() == expected_free);
+    }
+
+    
+    // 3. 释放块
+    for (int i=num_blocks-1; i>=0; i--) {
+        buddy_free_pages(blocks[i], block_sizes[i]);
+
+        // 释放后空闲页数增加
+        total_free_before = buddy_nr_free_pages();
+    }
+
+    // 4. 尝试分配整个空闲区（最大块）
+    struct Page *max_block = buddy_alloc_pages(total_free_before);
+    if (max_block != NULL) {
+        assert(buddy_nr_free_pages() == 0); // 全部分配
+        buddy_free_pages(max_block, total_free_before);
+        assert(buddy_nr_free_pages() == total_free_before); // 释放回去
+    }
+   
+    // 5. 边界情况测试
+    assert(buddy_alloc_pages(0) == NULL); // 分配 0 页应返回 NULL
+    assert(buddy_alloc_pages(total_free_before + 1) == NULL); // 超过剩余页数应返回 NULL
+
+    
+    // 6. 最终状态检查
+    basic_check(); // 最后调用结构检查，确保链表、property 和总页数正确
+}
+
 
 const struct pmm_manager buddy_pmm_manager = { // 打包为一个pmm_manager实例，定义在pmm.h中
     .name = "buddy_pmm_manager",
