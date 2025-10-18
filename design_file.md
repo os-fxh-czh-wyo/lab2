@@ -19,7 +19,7 @@ Buddy System算法把系统中的可用存储空间划分为存储块(Block)来�
 - 将 header 的物理地址加上 `va_pa_offset` 得到内核虚地址并把 `free_list` 指向它，然后对每个 `free_list[i]` 调用 `list_init()`实现数组初始化。
 - 按从左到右、尽量选取最大的对齐 2^k 块把剩余页分解为若干块，将每一页的property设置成order并加入 `free_list[order]`，同时维护 `buddy_nr_free`。
 
-关键代码片段：
+核心代码片段：
 
 ```c
 static void buddy_init_memmap(struct Page *base, size_t n) {
@@ -288,5 +288,4 @@ check_alloc_page() succeeded!
 satp virtual address: 0xffffffffc0204000
 satp physical address: 0x0000000080204000
 ```
-
-
+可以看到输出检查成功的信息，说明我们设计的Buddy System算法没问题。
