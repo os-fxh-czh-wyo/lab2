@@ -78,6 +78,8 @@
 
 **解答：**
 
+具体实现见buddy_system_pmm.c、buddy_system_pmm.h文件，设计文档见design_file.md文件
+
 ### 扩展练习Challenge：硬件的可用物理内存范围的获取方法（思考题）
 
 > 如果 OS 无法提前知道当前硬件的可用物理内存范围，请问你有何办法让 OS 获取可用物理内存范围？
